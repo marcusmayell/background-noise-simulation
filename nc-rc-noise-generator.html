@@ -1,0 +1,1329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NC / RC Noise Generator</title>
+<style>
+  :root {
+    --bg: #0f0f10;
+    --surface: #1a1a1e;
+    --surface2: #242428;
+    --surface3: #2e2e34;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --text: #e8e8ec;
+    --text2: #9898a8;
+    --text3: #5a5a6a;
+    --accent: #4fa3d4;
+    --accent2: #2d7aaa;
+    --green: #4cb87a;
+    --amber: #e8a83a;
+    --red: #e05555;
+    --nc-color: #4fa3d4;
+    --rc-color: #4cb87a;
+    --font: 'IBM Plex Mono', 'Courier New', monospace;
+    --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    min-height: 100vh;
+    padding: 0;
+    overflow-x: hidden;
+  }
+  /* HEADER */
+  .header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  .header-title {
+    font-family: var(--font);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    color: var(--text);
+    text-transform: uppercase;
+  }
+  .header-sub {
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: 0.06em;
+  }
+  .header-sep { flex: 1; }
+  /* TRANSPORT */
+  .transport {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .btn {
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    padding: 6px 14px;
+    font-family: var(--font);
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: background 0.15s, border-color 0.15s;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+  }
+  .btn:hover { background: var(--surface3); border-color: var(--border2); }
+  .btn.active { background: var(--accent2); border-color: var(--accent); color: #fff; }
+  .btn.play-btn { background: var(--accent2); border-color: var(--accent); color: #fff; }
+  .btn.play-btn:hover { background: var(--accent); }
+  .btn.stop-btn { border-color: var(--red); color: var(--red); }
+  .btn.stop-btn:hover { background: rgba(224,85,85,0.1); }
+  /* MAIN LAYOUT */
+  .main {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    grid-template-rows: auto auto;
+    gap: 0;
+    height: calc(100vh - 57px);
+  }
+  /* SIDEBAR */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    grid-row: 1 / 3;
+  }
+  .section-label {
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    color: var(--text3);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  /* MODE TOGGLE */
+  .mode-row {
+    display: flex;
+    gap: 4px;
+  }
+  .mode-btn {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text2);
+    padding: 7px 4px;
+    font-family: var(--font);
+    font-size: 11px;
+    cursor: pointer;
+    border-radius: 3px;
+    text-align: center;
+    transition: all 0.15s;
+    letter-spacing: 0.05em;
+  }
+  .mode-btn:hover { border-color: var(--border2); color: var(--text); }
+  .mode-btn.active-nc { background: rgba(79,163,212,0.15); border-color: var(--nc-color); color: var(--nc-color); }
+  .mode-btn.active-rc { background: rgba(76,184,122,0.15); border-color: var(--rc-color); color: var(--rc-color); }
+  .mode-btn.active-custom { background: rgba(232,168,58,0.15); border-color: var(--amber); color: var(--amber); }
+  /* CRITERION LEVEL */
+  .level-display {
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    padding: 12px 14px;
+    text-align: center;
+  }
+  .level-label {
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .level-value {
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+  .level-value.rc { color: var(--rc-color); }
+  .level-value.custom { color: var(--amber); }
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 4px;
+    background: var(--surface3);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+    margin: 6px 0;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: 2px solid var(--bg);
+  }
+  input[type=range].rc-slider::-webkit-slider-thumb { background: var(--rc-color); }
+  input[type=range].custom-slider::-webkit-slider-thumb { background: var(--amber); }
+  .range-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--text3);
+    margin-top: 2px;
+  }
+  /* GAIN */
+  .gain-section {}
+  .gain-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .gain-row label { font-size: 11px; color: var(--text2); min-width: 36px; }
+  .gain-row input[type=range] { flex: 1; }
+  .gain-value {
+    font-size: 12px;
+    color: var(--text);
+    min-width: 42px;
+    text-align: right;
+  }
+  /* CAL */
+  .cal-section {}
+  .cal-note {
+    font-size: 10px;
+    color: var(--text3);
+    line-height: 1.5;
+    margin-top: 6px;
+  }
+  /* BAND OCTAVE SELECTORS */
+  .band-toggles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+  }
+  .band-toggle {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text2);
+    padding: 3px 7px;
+    font-family: var(--font);
+    font-size: 10px;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.12s;
+  }
+  .band-toggle.on { background: rgba(79,163,212,0.15); border-color: var(--nc-color); color: var(--nc-color); }
+  /* LEVEL METER */
+  .meter-col {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 6px;
+  }
+  .meter-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+  }
+  .meter-label { color: var(--text3); min-width: 44px; text-align: right; }
+  .meter-bar-bg {
+    flex: 1;
+    height: 6px;
+    background: var(--surface2);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .meter-bar {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    width: 0%;
+    transition: width 0.08s;
+  }
+  .meter-val { color: var(--text2); min-width: 34px; font-size: 10px; }
+  /* CHARTS AREA */
+  .charts-area {
+    background: var(--bg);
+    padding: 16px 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .charts-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .chart-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 12px;
+  }
+  .chart-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .chart-panel-title {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text2);
+  }
+  .chart-panel-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 2px;
+    letter-spacing: 0.05em;
+  }
+  .badge-nc { background: rgba(79,163,212,0.12); color: var(--nc-color); border: 1px solid rgba(79,163,212,0.3); }
+  .badge-rc { background: rgba(76,184,122,0.12); color: var(--rc-color); border: 1px solid rgba(76,184,122,0.3); }
+  .badge-custom { background: rgba(232,168,58,0.12); color: var(--amber); border: 1px solid rgba(232,168,58,0.3); }
+  canvas.chart-canvas { width: 100% !important; }
+  /* CUSTOM BAND CONTROLS */
+  .custom-panel {
+    background: var(--surface);
+    border: 1px solid var(--amber);
+    border-radius: 4px;
+    padding: 14px 16px;
+  }
+  .custom-panel-header {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin-bottom: 14px;
+  }
+  .custom-bands-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .custom-band-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .custom-band-freq {
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: 0.04em;
+    min-width: 38px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .custom-band-slider {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    background: var(--surface3);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+    margin: 0;
+    padding: 0;
+    min-width: 0;
+  }
+  .custom-band-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--amber);
+    cursor: pointer;
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 0 1px rgba(232,168,58,0.4);
+  }
+  .custom-band-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--amber);
+    cursor: pointer;
+    border: 2px solid var(--bg);
+  }
+  .custom-band-val {
+    font-size: 11px;
+    color: var(--amber);
+    min-width: 44px;
+    text-align: right;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  /* STATUS BAR */
+  .status-bar {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 6px 20px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 0.06em;
+  }
+  .status-item { display: flex; align-items: center; gap: 5px; }
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--text3);
+  }
+  .status-dot.playing { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .status-val { color: var(--text2); }
+  /* INFO CARDS */
+  .info-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+  }
+  .info-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 10px 12px;
+  }
+  .info-card-label { font-size: 9px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }
+  .info-card-val { font-size: 15px; color: var(--text); font-weight: 600; }
+  .info-card-sub { font-size: 10px; color: var(--text3); margin-top: 2px; }
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 2px; }
+  /* CAL MODAL */
+  .modal-backdrop {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    padding: 24px;
+    width: 380px;
+    max-width: 95vw;
+  }
+  .modal-title { font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text); margin-bottom: 4px; }
+  .modal-sub { font-size: 11px; color: var(--text3); margin-bottom: 18px; line-height: 1.5; }
+  .modal-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .modal-label { font-size: 11px; color: var(--text2); min-width: 130px; }
+  .modal-val { font-size: 13px; color: var(--text); min-width: 50px; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 18px; justify-content: flex-end; }
+  /* NC/RC label overlay on charts */
+  .chart-curve-label {
+    font-family: var(--font);
+    font-size: 10px;
+  }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<h2 class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);">NC and RC Noise Criterion Generator — interactive noise level simulator with spectral charts</h2>
+
+<!-- HEADER -->
+<div class="header">
+  <div>
+    <div class="header-title">NC / RC Noise Generator</div>
+    <div class="header-sub">Octave-band noise criterion simulator</div>
+  </div>
+  <div class="header-sep"></div>
+  <div class="transport">
+    <button class="btn play-btn" id="btnPlay" onclick="togglePlay()">▶ PLAY</button>
+    <button class="btn stop-btn" id="btnStop" onclick="stopNoise()" style="display:none">■ STOP</button>
+    <button class="btn" onclick="openCalModal()">⚙ CALIBRATE</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+
+    <!-- MODE -->
+    <div>
+      <div class="section-label">Criterion Mode</div>
+      <div class="mode-row">
+        <button class="mode-btn active-nc" id="modeNC" onclick="setMode('NC')">NC</button>
+        <button class="mode-btn" id="modeRC" onclick="setMode('RC')">RC</button>
+        <button class="mode-btn" id="modeCUSTOM" onclick="setMode('CUSTOM')">CUSTOM</button>
+      </div>
+    </div>
+
+    <!-- LEVEL CONTROL -->
+    <div id="levelSection">
+      <div class="section-label">Criterion Level</div>
+      <div class="level-display">
+        <div class="level-label" id="levelLabel">NC LEVEL</div>
+        <div class="level-value" id="levelValue">35</div>
+      </div>
+      <input type="range" id="levelSlider" min="10" max="70" step="1" value="35" oninput="onLevelChange(this.value)">
+      <div class="range-row"><span>10</span><span>70</span></div>
+    </div>
+
+    <!-- GAIN -->
+    <div class="gain-section">
+      <div class="section-label">Output Level</div>
+      <div class="gain-row">
+        <label>Master</label>
+        <input type="range" id="masterGain" min="-40" max="0" step="0.5" value="-12" oninput="updateGain()">
+        <span class="gain-value" id="masterGainVal">-12 dB</span>
+      </div>
+      <div class="gain-row">
+        <label>Low</label>
+        <input type="range" id="lowGain" min="-20" max="20" step="0.5" value="0" oninput="updateGain()">
+        <span class="gain-value" id="lowGainVal">+0 dB</span>
+      </div>
+      <div class="gain-row">
+        <label>Mid</label>
+        <input type="range" id="midGain" min="-20" max="20" step="0.5" value="0" oninput="updateGain()">
+        <span class="gain-value" id="midGainVal">+0 dB</span>
+      </div>
+      <div class="gain-row">
+        <label>High</label>
+        <input type="range" id="highGain" min="-20" max="20" step="0.5" value="0" oninput="updateGain()">
+        <span class="gain-value" id="highGainVal">+0 dB</span>
+      </div>
+    </div>
+
+    <!-- BANDS -->
+    <div>
+      <div class="section-label">Active Octave Bands</div>
+      <div class="band-toggles" id="bandToggles"></div>
+    </div>
+
+    <!-- METERS -->
+    <div>
+      <div class="section-label">Band Levels (approx)</div>
+      <div class="meter-col" id="meterCol"></div>
+    </div>
+
+  </div>
+
+  <!-- CHARTS + CONTROLS AREA -->
+  <div class="charts-area">
+
+    <!-- INFO ROW -->
+    <div class="info-row">
+      <div class="info-card">
+        <div class="info-card-label">Criterion</div>
+        <div class="info-card-val" id="infoMode">NC-35</div>
+        <div class="info-card-sub" id="infoApp">Open office / hotel room</div>
+      </div>
+      <div class="info-card">
+        <div class="info-card-label">A-Weighted Est.</div>
+        <div class="info-card-val" id="infoLA">~38 dB(A)</div>
+        <div class="info-card-sub">Approximate equivalent</div>
+      </div>
+      <div class="info-card">
+        <div class="info-card-label">Dominant Band</div>
+        <div class="info-card-val" id="infoDomBand">500 Hz</div>
+        <div class="info-card-sub" id="infoDomVal">35.0 dB</div>
+      </div>
+    </div>
+
+    <!-- CHART PAIR -->
+    <div class="charts-row">
+      <div class="chart-panel">
+        <div class="chart-panel-header">
+          <span class="chart-panel-title">NC Chart</span>
+          <span class="chart-panel-badge badge-nc" id="ncBadge">NC-35</span>
+        </div>
+        <div style="position:relative; width:100%; height:260px;">
+          <canvas id="ncChart" role="img" aria-label="NC noise criterion octave band chart showing current level against NC curves from 10 to 70"></canvas>
+        </div>
+      </div>
+      <div class="chart-panel">
+        <div class="chart-panel-header">
+          <span class="chart-panel-title">RC Chart</span>
+          <span class="chart-panel-badge badge-rc" id="rcBadge">RC-35</span>
+        </div>
+        <div style="position:relative; width:100%; height:260px;">
+          <canvas id="rcChart" role="img" aria-label="RC room criterion octave band chart showing current level against RC curves from 10 to 70"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- CUSTOM PANEL (hidden unless mode=CUSTOM) -->
+    <div class="custom-panel" id="customPanel" style="display:none">
+      <div class="custom-panel-header">Custom Spectral Contour — drag bands to sculpt</div>
+      <div class="custom-bands-grid" id="customBandsGrid"></div>
+      <div style="display:flex; gap:12px; margin-top:12px; flex-wrap:wrap;">
+        <button class="btn" onclick="resetCustomToNC()">Reset → current NC</button>
+        <button class="btn" onclick="resetCustomToRC()">Reset → current RC</button>
+        <button class="btn" onclick="resetCustomFlat()">Flat (40 dB)</button>
+        <button class="btn" onclick="resetCustomPink()">Pink noise slope</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- STATUS BAR -->
+<div class="status-bar">
+  <div class="status-item">
+    <div class="status-dot" id="playDot"></div>
+    <span id="playStatus">STOPPED</span>
+  </div>
+  <div class="status-item">Context: <span class="status-val" id="statusCtx">—</span></div>
+  <div class="status-item">Mode: <span class="status-val" id="statusMode">NC</span></div>
+  <div class="status-item">Cal offset: <span class="status-val" id="statusCal">+0.0 dB</span></div>
+  <div style="flex:1"></div>
+  <span style="color: var(--text3)">Threshold Acoustics & AV — Internal Tool</span>
+</div>
+
+<!-- CALIBRATION MODAL -->
+<div class="modal-backdrop" id="calModal">
+  <div class="modal">
+    <div class="modal-title">Gain Calibration</div>
+    <div class="modal-sub">Reference to a known SPL with a sound level meter or calibrated source. Adjust the cal offset until the measured level matches the target.</div>
+    <div class="modal-row">
+      <span class="modal-label">Cal Offset</span>
+      <input type="range" id="calSlider" min="-20" max="20" step="0.1" value="0" oninput="updateCal()">
+      <span class="modal-val" id="calVal">+0.0 dB</span>
+    </div>
+    <div class="modal-row">
+      <span class="modal-label">Reference level (NC equiv.)</span>
+      <span class="modal-val" id="calRefLevel">NC-35</span>
+    </div>
+    <div class="modal-row">
+      <span class="modal-label">Est. output at 1m</span>
+      <span class="modal-val" id="calEstOutput">—</span>
+    </div>
+    <div style="font-size:10px; color:var(--text3); margin-top:8px; line-height:1.6;">
+      Positive offset = increase gain · Negative = decrease<br>
+      Setting persists while tool is open.
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="resetCal()">Reset</button>
+      <button class="btn active" onclick="closeCalModal()">Done</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// DATA: NC and RC criteria (SPL per octave band, 31.5 Hz – 8 kHz)
+// Source: ASHRAE & ANSI S12.2 / Beranek standards
+// ─────────────────────────────────────────────────────────────────────────────
+
+const OCTAVE_FREQS = [31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000];
+const OCTAVE_LABELS = ['31.5', '63', '125', '250', '500', '1k', '2k', '4k', '8k'];
+
+// NC curves: [31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000]
+// Reference: Beranek 1989, widely reproduced in ASHRAE
+const NC_CURVES = {};
+const NC_BASE = {
+  10: [57.0, 36.0, 22.0, 12.0, 5.0,  2.0,  0.0,  -1.0, -2.0],
+  15: [59.5, 40.0, 27.0, 18.0, 12.0, 9.0,  7.0,   5.0,  4.0],
+  20: [62.0, 44.0, 31.0, 24.0, 19.0, 16.0, 14.0,  12.0, 11.0],
+  25: [64.0, 48.0, 36.0, 30.0, 25.0, 22.0, 20.0,  18.0, 17.0],
+  30: [66.0, 52.0, 41.0, 35.0, 31.0, 29.0, 28.0,  26.0, 25.0],
+  35: [68.0, 56.0, 45.0, 40.0, 36.0, 34.0, 33.0,  32.0, 31.0],
+  40: [70.0, 60.0, 50.0, 45.0, 41.0, 39.0, 38.0,  37.0, 36.0],
+  45: [72.0, 64.0, 54.0, 50.0, 46.0, 44.0, 43.0,  42.0, 41.0],
+  50: [74.0, 67.0, 58.0, 54.0, 51.0, 49.0, 48.0,  47.0, 46.0],
+  55: [76.0, 71.0, 63.0, 59.0, 56.0, 54.0, 53.0,  52.0, 51.0],
+  60: [78.0, 74.0, 67.0, 64.0, 61.0, 59.0, 58.0,  57.0, 56.0],
+  65: [80.0, 78.0, 71.0, 68.0, 66.0, 64.0, 63.0,  62.0, 61.0],
+  70: [82.0, 82.0, 75.0, 73.0, 71.0, 70.0, 69.0,  68.0, 67.0],
+};
+
+// Generate interpolated NC curves for all integer levels 10-70
+for (let level = 10; level <= 70; level++) {
+  const lo = Math.floor(level / 5) * 5;
+  const hi = lo === 70 ? 70 : lo + 5;
+  if (level % 5 === 0) {
+    NC_CURVES[level] = [...NC_BASE[level]];
+  } else {
+    const t = (level - lo) / 5;
+    NC_CURVES[level] = NC_BASE[lo].map((v, i) => v + t * (NC_BASE[hi][i] - v));
+  }
+}
+
+// RC curves: [16, 31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000]
+// RC uses 16 Hz band as well (important for HVAC rumble assessment)
+// Reference: ASHRAE 2015 HVAC Applications, RC Mark II method
+const RC_FREQS_FULL = [16, 31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000];
+// RC curves defined at 16–8000 Hz. Index 1-9 corresponds to 31.5–8k for our octave bands.
+// RC-N has SPL = N + correction per band
+// Using tabulated RC values from ASHRAE (Schiller / Blazier method)
+const RC_CORRECTIONS = {
+  // These corrections added to the RC number to get SPL at each octave band
+  // [16, 31.5, 63, 125, 250, 500, 1k, 2k, 4k, 8k]
+  offsets: [25, 21.5, 17, 12, 6.5, 0, -6.5, -13, -19.5, -26]
+};
+
+const RC_CURVES = {};
+for (let level = 10; level <= 70; level++) {
+  // RC curves: SPL = level + offset per band, but floor at some value
+  // Offsets indexed from 31.5 Hz onwards (skip 16 Hz for our 9-band display)
+  RC_CURVES[level] = RC_CORRECTIONS.offsets.slice(1).map(o => Math.max(level + o, -10));
+}
+
+// A-weighting corrections (approx, per octave band 31.5–8k)
+const A_WEIGHTS = [-39.4, -26.2, -16.1, -8.6, -3.2, 0.0, 1.2, 1.0, -1.1];
+
+// NC application descriptions
+const NC_APPS = {
+  10: 'Threshold of background noise',
+  15: 'Recording studio / broadcast room',
+  20: 'Concert hall / recital room',
+  25: 'Private home / quiet library',
+  30: 'Hospital / executive office',
+  35: 'Hotel room / open plan office',
+  40: 'General office / retail',
+  45: 'Restaurant / light manufacturing',
+  50: 'Office with machinery / bank',
+  55: 'Cafeteria / noisy office',
+  60: 'Light manufacturing',
+  65: 'Heavy commercial / shop floor',
+  70: 'Continuous heavy industrial',
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────────────────────
+let currentMode = 'NC';
+let currentLevel = 35;
+let isPlaying = false;
+let calOffset = 0;
+let masterGainDB = -12;
+let lowGainDB = 0, midGainDB = 0, highGainDB = 0;
+let customLevels = [...NC_CURVES[35]]; // mutable copy
+let activeBands = [true,true,true,true,true,true,true,true,true];
+let meterAnimFrame = null;
+let ncChart = null, rcChart = null;
+
+// Audio nodes
+let audioCtx = null;
+let filterBank = [];
+let noiseNode = null;
+let masterGainNode = null;
+let analyserNode = null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUDIO ENGINE
+// ─────────────────────────────────────────────────────────────────────────────
+
+function getTargetLevels() {
+  if (currentMode === 'NC') return NC_CURVES[currentLevel];
+  if (currentMode === 'RC') return RC_CURVES[currentLevel];
+  return customLevels;
+}
+
+function dbToLinear(db) { return Math.pow(10, db / 20); }
+function linearToDB(lin) { return 20 * Math.log10(Math.max(lin, 1e-10)); }
+
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  masterGainNode = audioCtx.createGain();
+  analyserNode = audioCtx.createAnalyser();
+  analyserNode.fftSize = 2048;
+  masterGainNode.connect(analyserNode);
+  analyserNode.connect(audioCtx.destination);
+}
+
+function buildNoise() {
+  // White noise source
+  const bufferSize = audioCtx.sampleRate * 2;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+  noiseNode = audioCtx.createBufferSource();
+  noiseNode.buffer = buffer;
+  noiseNode.loop = true;
+
+  // Build a parallel bank of bandpass filters — one per octave band
+  filterBank = OCTAVE_FREQS.map((freq, idx) => {
+    const bpf = audioCtx.createBiquadFilter();
+    bpf.type = 'bandpass';
+    bpf.frequency.value = freq;
+    bpf.Q.value = 1.41; // Q ~ 1/sqrt(2) ≈ one octave bandwidth
+
+    const gainNode = audioCtx.createGain();
+    noiseNode.connect(bpf);
+    bpf.connect(gainNode);
+    gainNode.connect(masterGainNode);
+    return { bpf, gainNode, freq, idx };
+  });
+
+  updateAllBandGains();
+  masterGainNode.gain.value = dbToLinear(masterGainDB + calOffset);
+  noiseNode.start();
+}
+
+function updateAllBandGains() {
+  if (!filterBank.length) return;
+  const targetLevels = getTargetLevels();
+  const refLevel = 60; // dB reference for full scale mapping
+  const bandGainAdj = { low: lowGainDB, mid: midGainDB, high: highGainDB };
+
+  filterBank.forEach(({ gainNode, idx }) => {
+    let level = targetLevels[idx] ?? 0;
+    // Apply low/mid/high gain adjustments
+    if (idx < 3) level += bandGainAdj.low;
+    else if (idx < 6) level += bandGainAdj.mid;
+    else level += bandGainAdj.high;
+
+    // Active band gating
+    const active = activeBands[idx];
+    // Convert dB difference from reference to linear gain
+    const gainVal = active ? dbToLinear(level - refLevel) * 3.0 : 0;
+    gainNode.gain.setTargetAtTime(gainVal, audioCtx.currentTime, 0.05);
+  });
+}
+
+function updateMasterGain() {
+  if (!masterGainNode) return;
+  masterGainNode.gain.setTargetAtTime(
+    dbToLinear(masterGainDB + calOffset), audioCtx.currentTime, 0.05
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLAYBACK CONTROL
+// ─────────────────────────────────────────────────────────────────────────────
+
+function togglePlay() {
+  if (isPlaying) { stopNoise(); return; }
+  initAudio();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  buildNoise();
+  isPlaying = true;
+  document.getElementById('btnPlay').style.display = 'none';
+  document.getElementById('btnStop').style.display = 'inline-block';
+  document.getElementById('playDot').classList.add('playing');
+  document.getElementById('playStatus').textContent = 'PLAYING';
+  startMeterAnimation();
+}
+
+function stopNoise() {
+  if (!isPlaying) return;
+  if (noiseNode) { try { noiseNode.stop(); } catch(e){} noiseNode = null; }
+  filterBank = [];
+  isPlaying = false;
+  document.getElementById('btnPlay').style.display = 'inline-block';
+  document.getElementById('btnStop').style.display = 'none';
+  document.getElementById('playDot').classList.remove('playing');
+  document.getElementById('playStatus').textContent = 'STOPPED';
+  if (meterAnimFrame) { cancelAnimationFrame(meterAnimFrame); meterAnimFrame = null; }
+  resetMeters();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MODE & LEVEL
+// ─────────────────────────────────────────────────────────────────────────────
+
+function setMode(mode) {
+  currentMode = mode;
+  ['NC','RC','CUSTOM'].forEach(m => {
+    document.getElementById('mode'+m).className = 'mode-btn';
+  });
+  const btn = document.getElementById('mode'+mode);
+  if (mode==='NC') btn.className = 'mode-btn active-nc';
+  else if (mode==='RC') btn.className = 'mode-btn active-rc';
+  else btn.className = 'mode-btn active-custom';
+
+  document.getElementById('customPanel').style.display = (mode==='CUSTOM') ? 'block' : 'none';
+  document.getElementById('levelSection').style.opacity = (mode==='CUSTOM') ? '0.4' : '1';
+
+  const lv = document.getElementById('levelValue');
+  lv.className = 'level-value';
+  if (mode==='RC') lv.className += ' rc';
+  else if (mode==='CUSTOM') lv.className += ' custom';
+
+  document.getElementById('levelLabel').textContent = mode==='NC' ? 'NC LEVEL' : mode==='RC' ? 'RC LEVEL' : 'REF LEVEL';
+  document.getElementById('statusMode').textContent = mode;
+
+  if (mode==='CUSTOM') {
+    // Initialize custom to current NC
+    customLevels = [...NC_CURVES[currentLevel]];
+    syncCustomSliders();
+  }
+
+  updateInfoCards();
+  updateCharts();
+  if (isPlaying) { rebuildNoise(); }
+}
+
+function onLevelChange(val) {
+  currentLevel = parseInt(val);
+  document.getElementById('levelValue').textContent = val;
+  const label = document.getElementById('ncBadge');
+  label.textContent = currentMode==='NC' ? 'NC-'+val : 'RC-'+val;
+  document.getElementById('rcBadge').textContent = 'RC-'+val;
+  document.getElementById('ncBadge').textContent = 'NC-'+val;
+  if (currentMode==='CUSTOM') {
+    customLevels = [...NC_CURVES[currentLevel]];
+    syncCustomSliders();
+  }
+  updateInfoCards();
+  updateCharts();
+  if (isPlaying) updateAllBandGains();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GAIN CONTROLS
+// ─────────────────────────────────────────────────────────────────────────────
+
+function updateGain() {
+  masterGainDB = parseFloat(document.getElementById('masterGain').value);
+  lowGainDB = parseFloat(document.getElementById('lowGain').value);
+  midGainDB = parseFloat(document.getElementById('midGain').value);
+  highGainDB = parseFloat(document.getElementById('highGain').value);
+
+  document.getElementById('masterGainVal').textContent = (masterGainDB >= 0 ? '+' : '') + masterGainDB.toFixed(1) + ' dB';
+  document.getElementById('lowGainVal').textContent = (lowGainDB >= 0 ? '+' : '') + lowGainDB.toFixed(1) + ' dB';
+  document.getElementById('midGainVal').textContent = (midGainDB >= 0 ? '+' : '') + midGainDB.toFixed(1) + ' dB';
+  document.getElementById('highGainVal').textContent = (highGainDB >= 0 ? '+' : '') + highGainDB.toFixed(1) + ' dB';
+
+  updateMasterGain();
+  if (isPlaying) updateAllBandGains();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CALIBRATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+function openCalModal() { document.getElementById('calModal').classList.add('open'); }
+function closeCalModal() { document.getElementById('calModal').classList.remove('open'); }
+function resetCal() {
+  document.getElementById('calSlider').value = 0;
+  updateCal();
+}
+function updateCal() {
+  calOffset = parseFloat(document.getElementById('calSlider').value);
+  const sign = calOffset >= 0 ? '+' : '';
+  document.getElementById('calVal').textContent = sign + calOffset.toFixed(1) + ' dB';
+  document.getElementById('statusCal').textContent = sign + calOffset.toFixed(1) + ' dB';
+  const refLevelText = currentMode==='CUSTOM' ? 'Custom' :
+    (currentMode + '-' + currentLevel);
+  document.getElementById('calRefLevel').textContent = refLevelText;
+  const estDB = masterGainDB + calOffset;
+  document.getElementById('calEstOutput').textContent = (estDB >= 0 ? '+' : '') + estDB.toFixed(1) + ' dBFS';
+  updateMasterGain();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BAND TOGGLES
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buildBandToggles() {
+  const cont = document.getElementById('bandToggles');
+  cont.innerHTML = '';
+  OCTAVE_LABELS.forEach((lbl, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'band-toggle on';
+    btn.textContent = lbl;
+    btn.dataset.idx = i;
+    btn.onclick = () => {
+      activeBands[i] = !activeBands[i];
+      btn.className = 'band-toggle ' + (activeBands[i] ? 'on' : '');
+      if (isPlaying) updateAllBandGains();
+    };
+    cont.appendChild(btn);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// METERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buildMeters() {
+  const cont = document.getElementById('meterCol');
+  cont.innerHTML = '';
+  OCTAVE_LABELS.forEach((lbl, i) => {
+    cont.innerHTML += `
+      <div class="meter-row">
+        <span class="meter-label">${lbl} Hz</span>
+        <div class="meter-bar-bg"><div class="meter-bar" id="mbar${i}"></div></div>
+        <span class="meter-val" id="mval${i}">—</span>
+      </div>`;
+  });
+}
+
+function resetMeters() {
+  OCTAVE_LABELS.forEach((_, i) => {
+    const bar = document.getElementById('mbar'+i);
+    const val = document.getElementById('mval'+i);
+    if (bar) bar.style.width = '0%';
+    if (val) val.textContent = '—';
+  });
+}
+
+function startMeterAnimation() {
+  const targets = getTargetLevels();
+  let peak = Math.max(...targets.filter((v, i) => activeBands[i]));
+
+  function tick() {
+    const targets = getTargetLevels();
+    const peak = Math.max(...targets.filter((v, i) => activeBands[i]).map((v, i) => v));
+    const noiseFloor = Math.max(peak - 50, 0);
+
+    OCTAVE_LABELS.forEach((_, i) => {
+      const bar = document.getElementById('mbar'+i);
+      const val = document.getElementById('mval'+i);
+      if (!bar) return;
+      if (!activeBands[i]) {
+        bar.style.width = '0%';
+        if (val) val.textContent = '—';
+        return;
+      }
+      const targetDB = targets[i];
+      // Add slight random jitter (±0.5 dB) for realism
+      const displayed = targetDB + (Math.random() - 0.5);
+      const pct = Math.max(0, Math.min(100, (displayed - 0) / 90 * 100));
+      bar.style.width = pct + '%';
+      if (val) val.textContent = displayed.toFixed(1) + 'dB';
+    });
+    meterAnimFrame = requestAnimationFrame(tick);
+  }
+  tick();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INFO CARDS
+// ─────────────────────────────────────────────────────────────────────────────
+
+function updateInfoCards() {
+  const targets = getTargetLevels();
+  const modeStr = currentMode==='CUSTOM' ? 'Custom' : (currentMode+'-'+currentLevel);
+  document.getElementById('infoMode').textContent = modeStr;
+  document.getElementById('ncBadge').textContent = 'NC-'+currentLevel;
+  document.getElementById('rcBadge').textContent = 'RC-'+currentLevel;
+
+  // Find approx NC application
+  const appLevel = Math.round(currentLevel / 5) * 5;
+  const appKey = Math.max(10, Math.min(70, appLevel));
+  document.getElementById('infoApp').textContent = NC_APPS[appKey] || '—';
+  document.getElementById('statusCtx').textContent = NC_APPS[appKey] || '—';
+
+  // Estimate A-weighted equivalent
+  const aWeightedEnergies = targets.map((db, i) => Math.pow(10, (db + A_WEIGHTS[i]) / 10));
+  const totalAW = aWeightedEnergies.reduce((a, b) => a + b, 0);
+  const dBA = 10 * Math.log10(Math.max(totalAW, 1e-10));
+  document.getElementById('infoLA').textContent = '~' + Math.round(dBA) + ' dB(A)';
+
+  // Dominant band
+  const maxVal = Math.max(...targets);
+  const domIdx = targets.indexOf(maxVal);
+  document.getElementById('infoDomBand').textContent = OCTAVE_LABELS[domIdx] + ' Hz';
+  document.getElementById('infoDomVal').textContent = maxVal.toFixed(1) + ' dB';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CHARTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+function makeChartCommonOpts(type) {
+  const isDark = true;
+  const gridColor = 'rgba(255,255,255,0.06)';
+  const tickColor = '#5a5a6a';
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 200 },
+    plugins: { legend: { display: false }, tooltip: {
+      backgroundColor: '#1a1a1e',
+      borderColor: 'rgba(255,255,255,0.15)',
+      borderWidth: 1,
+      titleColor: '#e8e8ec',
+      bodyColor: '#9898a8',
+      titleFont: { family: "'IBM Plex Mono', monospace", size: 11 },
+      bodyFont: { family: "'IBM Plex Mono', monospace", size: 11 },
+    }},
+    scales: {
+      x: {
+        grid: { color: gridColor },
+        ticks: { color: tickColor, font: { family: "'IBM Plex Mono', monospace", size: 10 } },
+        title: { display: true, text: 'Octave Band Center Frequency (Hz)', color: tickColor, font: { family: "'IBM Plex Mono', monospace", size: 10 } }
+      },
+      y: {
+        min: 0, max: 90,
+        grid: { color: gridColor },
+        ticks: { color: tickColor, stepSize: 10, font: { family: "'IBM Plex Mono', monospace", size: 10 } },
+        title: { display: true, text: 'Sound Pressure Level (dB re 20 μPa)', color: tickColor, font: { family: "'IBM Plex Mono', monospace", size: 10 } }
+      }
+    }
+  };
+}
+
+// Background NC curves (a family for context)
+function buildBackgroundCurveDatasets(type, highlightLevel) {
+  const datasets = [];
+  const levels = [10,20,30,40,50,60,70];
+  const curves = type === 'NC' ? NC_CURVES : RC_CURVES;
+  levels.forEach(lvl => {
+    const isHL = Math.abs(lvl - highlightLevel) <= 5;
+    datasets.push({
+      label: type+'-'+lvl,
+      data: curves[lvl],
+      borderColor: isHL
+        ? (type==='NC' ? 'rgba(79,163,212,0.25)' : 'rgba(76,184,122,0.25)')
+        : 'rgba(255,255,255,0.05)',
+      borderWidth: isHL ? 1 : 0.5,
+      borderDash: [3, 3],
+      pointRadius: 0,
+      tension: 0.3,
+      fill: false,
+    });
+  });
+  return datasets;
+}
+
+function initCharts() {
+  const targets = getTargetLevels();
+  const opts = makeChartCommonOpts();
+
+  // NC CHART
+  const ncCtx = document.getElementById('ncChart').getContext('2d');
+  const ncBgDatasets = buildBackgroundCurveDatasets('NC', currentLevel);
+  ncChart = new Chart(ncCtx, {
+    type: 'line',
+    data: {
+      labels: OCTAVE_LABELS,
+      datasets: [
+        ...ncBgDatasets,
+        {
+          label: 'NC-'+currentLevel,
+          data: NC_CURVES[currentLevel],
+          borderColor: '#4fa3d4',
+          backgroundColor: 'rgba(79,163,212,0.06)',
+          borderWidth: 2,
+          borderDash: [5,3],
+          pointRadius: 3,
+          pointBackgroundColor: '#4fa3d4',
+          tension: 0.3,
+          fill: false,
+        },
+        {
+          label: 'Active Signal',
+          data: targets,
+          borderColor: '#e8a83a',
+          backgroundColor: 'rgba(232,168,58,0.08)',
+          borderWidth: 2.5,
+          pointRadius: 4,
+          pointBackgroundColor: '#e8a83a',
+          pointBorderColor: '#0f0f10',
+          pointBorderWidth: 1.5,
+          tension: 0.3,
+          fill: false,
+        }
+      ]
+    },
+    options: { ...makeChartCommonOpts('NC') }
+  });
+
+  // RC CHART
+  const rcCtx = document.getElementById('rcChart').getContext('2d');
+  const rcBgDatasets = buildBackgroundCurveDatasets('RC', currentLevel);
+  rcChart = new Chart(rcCtx, {
+    type: 'line',
+    data: {
+      labels: OCTAVE_LABELS,
+      datasets: [
+        ...rcBgDatasets,
+        {
+          label: 'RC-'+currentLevel,
+          data: RC_CURVES[currentLevel],
+          borderColor: '#4cb87a',
+          backgroundColor: 'rgba(76,184,122,0.06)',
+          borderWidth: 2,
+          borderDash: [5,3],
+          pointRadius: 3,
+          pointBackgroundColor: '#4cb87a',
+          tension: 0.3,
+          fill: false,
+        },
+        {
+          label: 'Active Signal (RC ref)',
+          data: targets,
+          borderColor: '#e8a83a',
+          backgroundColor: 'rgba(232,168,58,0.08)',
+          borderWidth: 2.5,
+          pointRadius: 4,
+          pointBackgroundColor: '#e8a83a',
+          pointBorderColor: '#0f0f10',
+          pointBorderWidth: 1.5,
+          tension: 0.3,
+          fill: false,
+        }
+      ]
+    },
+    options: { ...makeChartCommonOpts('RC') }
+  });
+}
+
+function updateCharts() {
+  if (!ncChart || !rcChart) return;
+  const targets = getTargetLevels();
+  const level = currentLevel;
+
+  // Update background curves
+  const ncBgDatasets = buildBackgroundCurveDatasets('NC', level);
+  const rcBgDatasets = buildBackgroundCurveDatasets('RC', level);
+
+  // NC chart
+  ncBgDatasets.forEach((ds, i) => {
+    if (ncChart.data.datasets[i]) {
+      ncChart.data.datasets[i].borderColor = ds.borderColor;
+      ncChart.data.datasets[i].borderWidth = ds.borderWidth;
+    }
+  });
+  const ncRefIdx = ncBgDatasets.length;
+  ncChart.data.datasets[ncRefIdx].data = NC_CURVES[level];
+  ncChart.data.datasets[ncRefIdx].label = 'NC-'+level;
+  ncChart.data.datasets[ncRefIdx + 1].data = targets;
+
+  // RC chart
+  rcBgDatasets.forEach((ds, i) => {
+    if (rcChart.data.datasets[i]) {
+      rcChart.data.datasets[i].borderColor = ds.borderColor;
+      rcChart.data.datasets[i].borderWidth = ds.borderWidth;
+    }
+  });
+  const rcRefIdx = rcBgDatasets.length;
+  rcChart.data.datasets[rcRefIdx].data = RC_CURVES[level];
+  rcChart.data.datasets[rcRefIdx].label = 'RC-'+level;
+  rcChart.data.datasets[rcRefIdx + 1].data = targets;
+
+  ncChart.update('none');
+  rcChart.update('none');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CUSTOM PANEL
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buildCustomBandsGrid() {
+  const grid = document.getElementById('customBandsGrid');
+  grid.innerHTML = '';
+  OCTAVE_LABELS.forEach((lbl, i) => {
+    const row = document.createElement('div');
+    row.className = 'custom-band-row';
+
+    const freqEl = document.createElement('span');
+    freqEl.className = 'custom-band-freq';
+    freqEl.textContent = lbl + ' Hz';
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.className = 'custom-band-slider';
+    slider.min = 0; slider.max = 85; slider.step = 0.5;
+    slider.value = customLevels[i];
+    slider.id = 'cslider'+i;
+    slider.oninput = (e) => {
+      customLevels[i] = parseFloat(e.target.value);
+      document.getElementById('cval'+i).textContent = parseFloat(customLevels[i]).toFixed(1) + ' dB';
+      updateInfoCards();
+      updateCharts();
+      if (isPlaying) updateAllBandGains();
+    };
+
+    const valEl = document.createElement('span');
+    valEl.className = 'custom-band-val';
+    valEl.id = 'cval'+i;
+    valEl.textContent = parseFloat(customLevels[i]).toFixed(1) + ' dB';
+
+    row.appendChild(freqEl);
+    row.appendChild(slider);
+    row.appendChild(valEl);
+    grid.appendChild(row);
+  });
+}
+
+function syncCustomSliders() {
+  OCTAVE_LABELS.forEach((_, i) => {
+    const sl = document.getElementById('cslider'+i);
+    const vl = document.getElementById('cval'+i);
+    if (sl) { sl.value = customLevels[i]; }
+    if (vl) { vl.textContent = parseFloat(customLevels[i]).toFixed(1) + ' dB'; }
+  });
+  updateInfoCards();
+  updateCharts();
+}
+
+function resetCustomToNC() {
+  customLevels = [...NC_CURVES[currentLevel]];
+  syncCustomSliders();
+  if (isPlaying) updateAllBandGains();
+}
+function resetCustomToRC() {
+  customLevels = [...RC_CURVES[currentLevel]];
+  syncCustomSliders();
+  if (isPlaying) updateAllBandGains();
+}
+function resetCustomFlat() {
+  customLevels = OCTAVE_FREQS.map(() => 40);
+  syncCustomSliders();
+  if (isPlaying) updateAllBandGains();
+}
+function resetCustomPink() {
+  // Pink noise: -3 dB/octave from reference
+  const ref = 65;
+  customLevels = OCTAVE_FREQS.map((f, i) => ref - i * 3);
+  syncCustomSliders();
+  if (isPlaying) updateAllBandGains();
+}
+
+function rebuildNoise() {
+  if (!isPlaying) return;
+  if (noiseNode) { try { noiseNode.stop(); } catch(e){} noiseNode = null; }
+  filterBank = [];
+  buildNoise();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────────────────────────────────────
+
+function init() {
+  buildBandToggles();
+  buildMeters();
+  buildCustomBandsGrid();
+  updateGain();
+  updateInfoCards();
+
+  // Defer chart init until Chart.js is loaded
+  const waitChart = setInterval(() => {
+    if (typeof Chart !== 'undefined') {
+      clearInterval(waitChart);
+      initCharts();
+    }
+  }, 80);
+}
+
+init();
+</script>
+</body>
+</html>
