@@ -301,6 +301,15 @@
   .badge-rc { background: rgba(76,184,122,0.12); color: var(--rc-color); border: 1px solid rgba(76,184,122,0.3); }
   .badge-custom { background: rgba(232,168,58,0.12); color: var(--amber); border: 1px solid rgba(232,168,58,0.3); }
   canvas.chart-canvas { width: 100% !important; }
+  .chart-panel canvas { cursor: crosshair; }
+  .drag-hint {
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 0.05em;
+    margin-top: 6px;
+    text-align: center;
+  }
+  .drag-hint.active { color: var(--amber); }
   /* CUSTOM BAND CONTROLS */
   .custom-panel {
     background: var(--surface);
@@ -637,6 +646,7 @@
         <div style="position:relative; width:100%; height:260px;">
           <canvas id="ncChart" role="img" aria-label="NC noise criterion octave band chart showing current level against NC curves from 10 to 70"></canvas>
         </div>
+        <div class="drag-hint" id="ncDragHint">drag amber nodes to sculpt — switches to custom mode</div>
       </div>
       <div class="chart-panel">
         <div class="chart-panel-header">
@@ -646,6 +656,7 @@
         <div style="position:relative; width:100%; height:260px;">
           <canvas id="rcChart" role="img" aria-label="RC room criterion octave band chart showing current level against RC curves from 10 to 70"></canvas>
         </div>
+        <div class="drag-hint" id="rcDragHint">drag amber nodes to sculpt — switches to custom mode</div>
       </div>
     </div>
 
@@ -730,6 +741,7 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-dragdata@2.2.5/dist/chartjs-plugin-dragdata.min.js"></script>
 <script>
 // ─────────────────────────────────────────────────────────────────────────────
 // DATA: NC and RC criteria (SPL per octave band, 31.5 Hz – 8 kHz)
@@ -1146,23 +1158,96 @@ function updateInfoCards() {
 // CHARTS
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Background NC/RC curves (a family for context)
+function buildBackgroundCurveDatasets(type, highlightLevel) {
+  const datasets = [];
+  const levels = [10,20,30,40,50,60,70];
+  const curves = type === 'NC' ? NC_CURVES : RC_CURVES;
+  levels.forEach(lvl => {
+    const isHL = Math.abs(lvl - highlightLevel) <= 5;
+    datasets.push({
+      label: type+'-'+lvl,
+      data: curves[lvl],
+      borderColor: isHL
+        ? (type==='NC' ? 'rgba(79,163,212,0.25)' : 'rgba(76,184,122,0.25)')
+        : 'rgba(255,255,255,0.05)',
+      borderWidth: isHL ? 1 : 0.5,
+      borderDash: [3, 3],
+      pointRadius: 0,
+      pointHoverRadius: 0,
+      tension: 0.3,
+      fill: false,
+      dragData: false,
+    });
+  });
+  return datasets;
+}
+
 function makeChartCommonOpts(type) {
-  const isDark = true;
   const gridColor = 'rgba(255,255,255,0.06)';
   const tickColor = '#5a5a6a';
   return {
     responsive: true,
     maintainAspectRatio: false,
-    animation: { duration: 200 },
-    plugins: { legend: { display: false }, tooltip: {
-      backgroundColor: '#1a1a1e',
-      borderColor: 'rgba(255,255,255,0.15)',
-      borderWidth: 1,
-      titleColor: '#e8e8ec',
-      bodyColor: '#9898a8',
-      titleFont: { family: "'IBM Plex Mono', monospace", size: 11 },
-      bodyFont: { family: "'IBM Plex Mono', monospace", size: 11 },
-    }},
+    animation: { duration: 150 },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#1a1a1e',
+        borderColor: 'rgba(255,255,255,0.15)',
+        borderWidth: 1,
+        titleColor: '#e8e8ec',
+        bodyColor: '#9898a8',
+        titleFont: { family: "'IBM Plex Mono', monospace", size: 11 },
+        bodyFont: { family: "'IBM Plex Mono', monospace", size: 11 },
+        filter: (item) => item.datasetIndex === 8, // only active signal
+      },
+      dragData: {
+        round: 1,
+        showTooltip: true,
+        dragX: false,
+        onDragStart: function(e, datasetIndex, index, value) {
+          // Only allow dragging the active signal dataset (last one, index bgLen+1)
+          const bgLen = 7;
+          if (datasetIndex !== bgLen + 1) return false;
+          // If not in custom mode, switch to it first
+          if (currentMode !== 'CUSTOM') {
+            customLevels = [...getTargetLevels()];
+            setMode('CUSTOM');
+          }
+        },
+        onDrag: function(e, datasetIndex, index, value) {
+          const bgLen = 7;
+          if (datasetIndex !== bgLen + 1) return false;
+          const clamped = Math.max(0, Math.min(85, value));
+          customLevels[index] = clamped;
+          // Keep both charts in sync while dragging
+          const other = (type === 'NC') ? rcChart : ncChart;
+          if (other) {
+            other.data.datasets[bgLen + 1].data = [...customLevels];
+            other.update('none');
+          }
+          // Sync sliders
+          const sl = document.getElementById('cslider'+index);
+          const vl = document.getElementById('cval'+index);
+          if (sl) sl.value = clamped;
+          if (vl) vl.textContent = clamped.toFixed(1) + ' dB';
+          updateInfoCards();
+          if (isPlaying) updateAllBandGains();
+          return clamped;
+        },
+        onDragEnd: function(e, datasetIndex, index, value) {
+          const bgLen = 7;
+          if (datasetIndex !== bgLen + 1) return;
+          const clamped = Math.max(0, Math.min(85, value));
+          customLevels[index] = clamped;
+          syncCustomSliders();
+          updateInfoCards();
+          updateCharts();
+          if (isPlaying) updateAllBandGains();
+        },
+      }
+    },
     scales: {
       x: {
         grid: { color: gridColor },
@@ -1179,32 +1264,46 @@ function makeChartCommonOpts(type) {
   };
 }
 
-// Background NC curves (a family for context)
-function buildBackgroundCurveDatasets(type, highlightLevel) {
-  const datasets = [];
-  const levels = [10,20,30,40,50,60,70];
-  const curves = type === 'NC' ? NC_CURVES : RC_CURVES;
-  levels.forEach(lvl => {
-    const isHL = Math.abs(lvl - highlightLevel) <= 5;
-    datasets.push({
-      label: type+'-'+lvl,
-      data: curves[lvl],
-      borderColor: isHL
-        ? (type==='NC' ? 'rgba(79,163,212,0.25)' : 'rgba(76,184,122,0.25)')
-        : 'rgba(255,255,255,0.05)',
-      borderWidth: isHL ? 1 : 0.5,
-      borderDash: [3, 3],
-      pointRadius: 0,
-      tension: 0.3,
-      fill: false,
-    });
-  });
-  return datasets;
+function makeActiveSignalDataset(targets, label) {
+  return {
+    label: label,
+    data: [...targets],
+    borderColor: '#e8a83a',
+    backgroundColor: 'rgba(232,168,58,0.08)',
+    borderWidth: 2.5,
+    pointRadius: 7,
+    pointHoverRadius: 10,
+    pointBackgroundColor: '#e8a83a',
+    pointBorderColor: '#0f0f10',
+    pointBorderWidth: 2,
+    pointHoverBackgroundColor: '#ffc85a',
+    pointHoverBorderColor: '#fff',
+    pointHoverBorderWidth: 2,
+    tension: 0.3,
+    fill: false,
+    dragData: true,
+  };
+}
+
+function makeRefCurveDataset(label, data, color) {
+  return {
+    label: label,
+    data: [...data],
+    borderColor: color,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderDash: [5, 3],
+    pointRadius: 3,
+    pointHoverRadius: 3,
+    pointBackgroundColor: color,
+    tension: 0.3,
+    fill: false,
+    dragData: false,
+  };
 }
 
 function initCharts() {
   const targets = getTargetLevels();
-  const opts = makeChartCommonOpts();
 
   // NC CHART
   const ncCtx = document.getElementById('ncChart').getContext('2d');
@@ -1215,34 +1314,11 @@ function initCharts() {
       labels: OCTAVE_LABELS,
       datasets: [
         ...ncBgDatasets,
-        {
-          label: 'NC-'+currentLevel,
-          data: NC_CURVES[currentLevel],
-          borderColor: '#4fa3d4',
-          backgroundColor: 'rgba(79,163,212,0.06)',
-          borderWidth: 2,
-          borderDash: [5,3],
-          pointRadius: 3,
-          pointBackgroundColor: '#4fa3d4',
-          tension: 0.3,
-          fill: false,
-        },
-        {
-          label: 'Active Signal',
-          data: targets,
-          borderColor: '#e8a83a',
-          backgroundColor: 'rgba(232,168,58,0.08)',
-          borderWidth: 2.5,
-          pointRadius: 4,
-          pointBackgroundColor: '#e8a83a',
-          pointBorderColor: '#0f0f10',
-          pointBorderWidth: 1.5,
-          tension: 0.3,
-          fill: false,
-        }
+        makeRefCurveDataset('NC-'+currentLevel, NC_CURVES[currentLevel], '#4fa3d4'),
+        makeActiveSignalDataset(targets, 'Active Signal'),
       ]
     },
-    options: { ...makeChartCommonOpts('NC') }
+    options: makeChartCommonOpts('NC'),
   });
 
   // RC CHART
@@ -1254,34 +1330,11 @@ function initCharts() {
       labels: OCTAVE_LABELS,
       datasets: [
         ...rcBgDatasets,
-        {
-          label: 'RC-'+currentLevel,
-          data: RC_CURVES[currentLevel],
-          borderColor: '#4cb87a',
-          backgroundColor: 'rgba(76,184,122,0.06)',
-          borderWidth: 2,
-          borderDash: [5,3],
-          pointRadius: 3,
-          pointBackgroundColor: '#4cb87a',
-          tension: 0.3,
-          fill: false,
-        },
-        {
-          label: 'Active Signal (RC ref)',
-          data: targets,
-          borderColor: '#e8a83a',
-          backgroundColor: 'rgba(232,168,58,0.08)',
-          borderWidth: 2.5,
-          pointRadius: 4,
-          pointBackgroundColor: '#e8a83a',
-          pointBorderColor: '#0f0f10',
-          pointBorderWidth: 1.5,
-          tension: 0.3,
-          fill: false,
-        }
+        makeRefCurveDataset('RC-'+currentLevel, RC_CURVES[currentLevel], '#4cb87a'),
+        makeActiveSignalDataset(targets, 'Active Signal'),
       ]
     },
-    options: { ...makeChartCommonOpts('RC') }
+    options: makeChartCommonOpts('RC'),
   });
 }
 
@@ -1289,34 +1342,46 @@ function updateCharts() {
   if (!ncChart || !rcChart) return;
   const targets = getTargetLevels();
   const level = currentLevel;
+  const bgLen = 7; // 7 background curves
+  const refIdx = bgLen;     // index 7 = reference NC/RC curve
+  const activeIdx = bgLen + 1; // index 8 = active signal
 
-  // Update background curves
+  // Update background curve visibility
   const ncBgDatasets = buildBackgroundCurveDatasets('NC', level);
   const rcBgDatasets = buildBackgroundCurveDatasets('RC', level);
-
-  // NC chart
   ncBgDatasets.forEach((ds, i) => {
     if (ncChart.data.datasets[i]) {
       ncChart.data.datasets[i].borderColor = ds.borderColor;
       ncChart.data.datasets[i].borderWidth = ds.borderWidth;
     }
   });
-  const ncRefIdx = ncBgDatasets.length;
-  ncChart.data.datasets[ncRefIdx].data = NC_CURVES[level];
-  ncChart.data.datasets[ncRefIdx].label = 'NC-'+level;
-  ncChart.data.datasets[ncRefIdx + 1].data = targets;
-
-  // RC chart
   rcBgDatasets.forEach((ds, i) => {
     if (rcChart.data.datasets[i]) {
       rcChart.data.datasets[i].borderColor = ds.borderColor;
       rcChart.data.datasets[i].borderWidth = ds.borderWidth;
     }
   });
-  const rcRefIdx = rcBgDatasets.length;
-  rcChart.data.datasets[rcRefIdx].data = RC_CURVES[level];
-  rcChart.data.datasets[rcRefIdx].label = 'RC-'+level;
-  rcChart.data.datasets[rcRefIdx + 1].data = targets;
+
+  // Update reference curves
+  ncChart.data.datasets[refIdx].data = [...NC_CURVES[level]];
+  ncChart.data.datasets[refIdx].label = 'NC-'+level;
+  rcChart.data.datasets[refIdx].data = [...RC_CURVES[level]];
+  rcChart.data.datasets[refIdx].label = 'RC-'+level;
+
+  // Update active signal — only if not mid-drag
+  ncChart.data.datasets[activeIdx].data = [...targets];
+  rcChart.data.datasets[activeIdx].data = [...targets];
+
+  // Update drag hint styling
+  const isCustom = currentMode === 'CUSTOM';
+  document.getElementById('ncDragHint').className = 'drag-hint' + (isCustom ? ' active' : '');
+  document.getElementById('rcDragHint').className = 'drag-hint' + (isCustom ? ' active' : '');
+  document.getElementById('ncDragHint').textContent = isCustom
+    ? 'drag amber nodes to sculpt spectral shape'
+    : 'drag amber nodes to sculpt — switches to custom mode';
+  document.getElementById('rcDragHint').textContent = isCustom
+    ? 'drag amber nodes to sculpt spectral shape'
+    : 'drag amber nodes to sculpt — switches to custom mode';
 
   ncChart.update('none');
   rcChart.update('none');
@@ -1510,7 +1575,7 @@ function init() {
 
   // Defer chart init until Chart.js is loaded
   const waitChart = setInterval(() => {
-    if (typeof Chart !== 'undefined') {
+    if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined' || typeof Chart !== 'undefined') {
       clearInterval(waitChart);
       initCharts();
     }
