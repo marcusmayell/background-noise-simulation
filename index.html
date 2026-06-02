@@ -441,6 +441,84 @@
     font-family: var(--font);
     font-size: 10px;
   }
+  /* IMPORT PANEL */
+  .import-panel {
+    margin-top: 14px;
+    border-top: 1px solid rgba(232,168,58,0.2);
+    padding-top: 14px;
+  }
+  .import-panel-header {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 10px;
+  }
+  .import-type-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .import-type-btn {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text2);
+    padding: 5px 8px;
+    font-family: var(--font);
+    font-size: 11px;
+    cursor: pointer;
+    border-radius: 3px;
+    text-align: center;
+    transition: all 0.12s;
+    letter-spacing: 0.04em;
+  }
+  .import-type-btn:hover { border-color: var(--border2); color: var(--text); }
+  .import-type-btn.active { background: rgba(232,168,58,0.12); border-color: var(--amber); color: var(--amber); }
+  .import-hint {
+    font-size: 10px;
+    color: var(--text3);
+    line-height: 1.6;
+    margin-bottom: 8px;
+  }
+  .import-hint code {
+    font-family: var(--font);
+    color: var(--text2);
+    background: var(--surface2);
+    padding: 1px 4px;
+    border-radius: 2px;
+    font-size: 10px;
+  }
+  textarea.import-textarea {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 12px;
+    padding: 8px 10px;
+    resize: vertical;
+    min-height: 60px;
+    outline: none;
+    line-height: 1.6;
+    letter-spacing: 0.03em;
+  }
+  textarea.import-textarea:focus { border-color: var(--amber); }
+  textarea.import-textarea::placeholder { color: var(--text3); }
+  .import-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .import-status {
+    font-size: 10px;
+    flex: 1;
+    letter-spacing: 0.04em;
+  }
+  .import-status.ok { color: var(--green); }
+  .import-status.err { color: var(--red); }
 </style>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
 </head>
@@ -493,8 +571,8 @@
       <div class="section-label">Output Level</div>
       <div class="gain-row">
         <label>Master</label>
-        <input type="range" id="masterGain" min="-40" max="0" step="0.5" value="-12" oninput="updateGain()">
-        <span class="gain-value" id="masterGainVal">-12 dB</span>
+        <input type="range" id="masterGain" min="-40" max="0" step="0.5" value="-40" oninput="updateGain()">
+        <span class="gain-value" id="masterGainVal">-40 dB</span>
       </div>
       <div class="gain-row">
         <label>Low</label>
@@ -580,6 +658,29 @@
         <button class="btn" onclick="resetCustomToRC()">Reset → current RC</button>
         <button class="btn" onclick="resetCustomFlat()">Flat (40 dB)</button>
         <button class="btn" onclick="resetCustomPink()">Pink noise slope</button>
+      </div>
+
+      <!-- IMPORT PANEL -->
+      <div class="import-panel">
+        <div class="import-panel-header">Import measured data</div>
+        <div class="import-type-row">
+          <button class="import-type-btn active" id="importBtn1Oct" onclick="setImportType('1oct')">Full octave (9 bands)</button>
+          <button class="import-type-btn" id="importBtn3Oct" onclick="setImportType('3oct')">1/3 octave (27 bands)</button>
+        </div>
+        <div class="import-hint" id="importHint1oct">
+          Paste 9 space- or comma-separated dB values — one per octave band:<br>
+          <code>31.5 · 63 · 125 · 250 · 500 · 1k · 2k · 4k · 8k</code>
+        </div>
+        <div class="import-hint" id="importHint3oct" style="display:none">
+          Paste 27 space- or comma-separated dB values — 1/3-octave bands from 25 Hz to 8 kHz. Bands will be energy-averaged into 9 full octaves.<br>
+          <code>25 31.5 40 · 50 63 80 · 100 125 160 · 200 250 315 · 400 500 630 · 800 1k 1.25k · 1.6k 2k 2.5k · 3.15k 4k 5k · 6.3k 8k 10k</code>
+        </div>
+        <textarea class="import-textarea" id="importTextarea" placeholder="e.g.  68  56  45  40  36  34  33  32  31" spellcheck="false"></textarea>
+        <div class="import-actions">
+          <button class="btn active" onclick="applyImport()">Apply →</button>
+          <button class="btn" onclick="clearImport()">Clear</button>
+          <span class="import-status" id="importStatus"></span>
+        </div>
       </div>
     </div>
 
@@ -716,7 +817,7 @@ let currentMode = 'NC';
 let currentLevel = 35;
 let isPlaying = false;
 let calOffset = 0;
-let masterGainDB = -12;
+let masterGainDB = -40;
 let lowGainDB = 0, midGainDB = 0, highGainDB = 0;
 let customLevels = [...NC_CURVES[35]]; // mutable copy
 let activeBands = [true,true,true,true,true,true,true,true,true];
@@ -1294,6 +1395,99 @@ function resetCustomPink() {
   customLevels = OCTAVE_FREQS.map((f, i) => ref - i * 3);
   syncCustomSliders();
   if (isPlaying) updateAllBandGains();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IMPORT MEASURED DATA
+// ─────────────────────────────────────────────────────────────────────────────
+
+let importType = '1oct';
+
+// 1/3-octave center frequencies grouped into 9 full octaves (25–10k covers 31.5–8k octave bands)
+const THIRD_OCT_GROUPS = [
+  [25, 31.5, 40],       // → 31.5 Hz octave
+  [50, 63, 80],         // → 63 Hz octave
+  [100, 125, 160],      // → 125 Hz octave
+  [200, 250, 315],      // → 250 Hz octave
+  [400, 500, 630],      // → 500 Hz octave
+  [800, 1000, 1250],    // → 1 kHz octave
+  [1600, 2000, 2500],   // → 2 kHz octave
+  [3150, 4000, 5000],   // → 4 kHz octave
+  [6300, 8000, 10000],  // → 8 kHz octave
+];
+
+function setImportType(type) {
+  importType = type;
+  document.getElementById('importBtn1Oct').className = 'import-type-btn' + (type==='1oct' ? ' active' : '');
+  document.getElementById('importBtn3Oct').className = 'import-type-btn' + (type==='3oct' ? ' active' : '');
+  document.getElementById('importHint1oct').style.display = type==='1oct' ? 'block' : 'none';
+  document.getElementById('importHint3oct').style.display = type==='3oct' ? 'block' : 'none';
+  document.getElementById('importTextarea').placeholder = type==='1oct'
+    ? 'e.g.  68  56  45  40  36  34  33  32  31'
+    : 'e.g.  72 68 65  60 56 54  50 45 42  40 38 36  37 36 34  34 33 32  33 32 31  32 31 30  31 30 29';
+  setImportStatus('', '');
+}
+
+function parseNumbers(raw) {
+  return raw
+    .trim()
+    .split(/[\s,;|\t\n\r]+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0)
+    .map(s => parseFloat(s));
+}
+
+function energyAvgThree(a, b, c) {
+  // Energy average of three 1/3-octave SPL values → full octave SPL
+  const e = [a, b, c].map(v => Math.pow(10, v / 10));
+  return 10 * Math.log10((e[0] + e[1] + e[2]) / 3);
+}
+
+function setImportStatus(msg, type) {
+  const el = document.getElementById('importStatus');
+  el.textContent = msg;
+  el.className = 'import-status' + (type ? ' ' + type : '');
+}
+
+function applyImport() {
+  const raw = document.getElementById('importTextarea').value;
+  const nums = parseNumbers(raw);
+
+  if (nums.some(isNaN)) {
+    setImportStatus('Non-numeric value found — check input', 'err');
+    return;
+  }
+
+  if (importType === '1oct') {
+    if (nums.length !== 9) {
+      setImportStatus('Expected 9 values, got ' + nums.length, 'err');
+      return;
+    }
+    customLevels = nums.slice(0, 9);
+    setImportStatus('Applied — ' + nums.length + ' octave bands loaded', 'ok');
+
+  } else {
+    // 1/3 octave: accept 27 values (25 Hz – 10 kHz) or 28 (20 Hz – 10 kHz)
+    // We use the last 27 if more are provided, or accept exactly 27
+    if (nums.length < 27) {
+      setImportStatus('Expected 27 values (1/3-oct 25 Hz–10 kHz), got ' + nums.length, 'err');
+      return;
+    }
+    // If 28 values given (some meters include 20 Hz), drop the first
+    const vals = nums.length >= 28 ? nums.slice(nums.length - 27) : nums.slice(0, 27);
+    customLevels = THIRD_OCT_GROUPS.map((grp, i) => {
+      return energyAvgThree(vals[i*3], vals[i*3+1], vals[i*3+2]);
+    });
+    setImportStatus('Applied — 27 bands energy-averaged to 9 octaves', 'ok');
+  }
+
+  syncCustomSliders();
+  if (isPlaying) updateAllBandGains();
+}
+
+function clearImport() {
+  document.getElementById('importTextarea').value = '';
+  setImportStatus('', '');
 }
 
 function rebuildNoise() {
